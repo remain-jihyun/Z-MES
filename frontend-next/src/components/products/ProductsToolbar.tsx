@@ -5,7 +5,7 @@ import { Search, Plus, RotateCcw, RefreshCw, CheckCircle2, Loader2, Info } from 
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FilterMultiSelect } from "@/components/common/FilterMultiSelect"
 import {
   ITEM_TYPE_LABELS, ITEM_TYPE_ORDER,
@@ -22,7 +22,8 @@ type SyncState = "idle" | "syncing" | "done"
 interface ProductsToolbarProps {
   filters: ItemFilterParams
   onFilterChange: (filters: ItemFilterParams) => void
-  onCreateClick: () => void
+  onCreateClick?: () => void
+  showSync?: boolean
 }
 
 const typeOptions = ITEM_TYPE_ORDER.map((v) => ({ value: v, label: ITEM_TYPE_LABELS[v] }))
@@ -31,7 +32,7 @@ const stockControlOptions = [{ value: "Y", label: "Y" }, { value: "N", label: "N
 const salesChannelOptions = SALES_CHANNEL_ORDER.map((v) => ({ value: v, label: SALES_CHANNEL_LABELS[v] }))
 const codePrefixOptions = CODE_PREFIX_ORDER.map((v) => ({ value: v, label: CODE_PREFIX_LABELS[v] }))
 
-export function ProductsToolbar({ filters, onFilterChange, onCreateClick }: ProductsToolbarProps) {
+export function ProductsToolbar({ filters, onFilterChange, onCreateClick, showSync }: ProductsToolbarProps) {
   const [syncState, setSyncState] = useState<SyncState>("idle")
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
 
@@ -43,18 +44,6 @@ export function ProductsToolbar({ filters, onFilterChange, onCreateClick }: Prod
 
   return (
     <div className="space-y-2">
-      {/* 사용 상태 탭 */}
-      <Tabs
-        value={filters.activeStatus ?? "ALL"}
-        onValueChange={(v) => onFilterChange({ ...filters, activeStatus: v as ActiveStatusFilter })}
-      >
-        <TabsList className="h-8">
-          {(Object.entries(ACTIVE_STATUS_LABELS) as [ActiveStatusFilter, string][]).map(([value, label]) => (
-            <TabsTrigger key={value} value={value} className="text-xs px-3 h-7">{label}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
       {/* 필터 + 액션 */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {/* 필터 영역 */}
@@ -68,6 +57,20 @@ export function ProductsToolbar({ filters, onFilterChange, onCreateClick }: Prod
               className="w-44 pl-8 h-8 text-sm"
             />
           </div>
+
+          <Select
+            value={filters.activeStatus ?? "ALL"}
+            onValueChange={(v) => onFilterChange({ ...filters, activeStatus: v as ActiveStatusFilter })}
+          >
+            <SelectTrigger className="h-8 w-28 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(ACTIVE_STATUS_LABELS) as [ActiveStatusFilter, string][]).map(([value, label]) => (
+                <SelectItem key={value} value={value} className="text-sm">{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <FilterMultiSelect
             label="품목코드"
@@ -108,22 +111,27 @@ export function ProductsToolbar({ filters, onFilterChange, onCreateClick }: Prod
             onChange={(vals) => onFilterChange({ ...filters, salesChannel: vals.length > 0 ? vals as SalesChannelFilter[] : undefined })}
             className="w-28"
           />
-        </div>
 
-        {/* 액션 버튼 */}
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleSync} disabled={syncState === "syncing"}>
-            <RefreshCw className={`size-3.5 ${syncState === "syncing" ? "animate-spin" : ""}`} />
-            Z-MIS 연동
-          </Button>
           <Button variant="ghost" size="sm" className="gap-1" onClick={() => onFilterChange({})}>
             <RotateCcw className="size-3.5" />
             초기화
           </Button>
-          <Button size="sm" className="gap-1" onClick={onCreateClick}>
-            <Plus className="size-3.5" />
-            신규 등록
-          </Button>
+        </div>
+
+        {/* 액션 버튼 */}
+        <div className="flex items-center gap-2 shrink-0">
+          {showSync && (
+            <Button variant="outline" size="sm" className="gap-1" onClick={handleSync} disabled={syncState === "syncing"}>
+              <RefreshCw className={`size-3.5 ${syncState === "syncing" ? "animate-spin" : ""}`} />
+              Z-MIS 연동
+            </Button>
+          )}
+          {onCreateClick && (
+            <Button size="sm" className="gap-1" onClick={onCreateClick}>
+              <Plus className="size-3.5" />
+              신규 등록
+            </Button>
+          )}
         </div>
       </div>
 

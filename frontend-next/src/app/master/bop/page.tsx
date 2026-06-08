@@ -9,12 +9,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-  ChevronDown, ChevronRight, Link2, Save, CheckCircle2, AlertCircle,
+  ChevronDown, ChevronRight, ChevronLeft, Link2, Save, CheckCircle2, AlertCircle,
   Plus, X, Pencil, History, CornerUpLeft, Clock, Trash2, LayoutGrid, ZoomIn, ZoomOut, ArrowLeft,
   Bookmark, GripVertical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ChangeLogBanner } from "@/components/ChangeLogBanner"
+import {
+  getSavedProcesses, addSavedProcess as storeSaveProcess, deleteSavedProcess as storeDeleteProcess,
+} from "@/lib/stores/saved-processes"
 
 // ── 팔레트 ────────────────────────────────────────────────
 
@@ -26,6 +29,8 @@ const PALETTE: PaletteGroup[] = [
     items: [{ id:"prc-029", name:"자재 입고", isCcp:false, isInspection:true, isCooling:false },{ id:"prc-030", name:"자재 불출 - 전기호출", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-031", name:"자재 불출 - 통합", isCcp:false, isInspection:false, isCooling:false }] },
   { id: "preprocess", label: "전처리",     spaceLabel: "전처리실", color: "#f97316",
     items: [{ id:"prc-001", name:"전전처리", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-004", name:"전처리 - 야채류", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-005", name:"전처리 - 수산/육류", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-006", name:"전처리 - 검수", isCcp:false, isInspection:true, isCooling:false },{ id:"prc-002", name:"가열", isCcp:true, isInspection:false, isCooling:false },{ id:"prc-003", name:"소독/세정", isCcp:true, isInspection:false, isCooling:true }] },
+  { id: "thawing",    label: "해동",       spaceLabel: "해동실",   color: "#06b6d4",
+    items: [{ id:"prc-033", name:"해동 - 냉장", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-034", name:"해동 - 유수", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-035", name:"해동 - 검수", isCcp:false, isInspection:true, isCooling:false }] },
   { id: "cooking",    label: "조리",       spaceLabel: "조리실",   color: "#ef4444",
     items: [{ id:"prc-007", name:"조리 - 무침", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-008", name:"조리 - 전", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-010", name:"조리 - 국솥", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-011", name:"조리 - 인덕션", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-012", name:"조리 - 튀김기", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-013", name:"조리 - 오븐", isCcp:false, isInspection:false, isCooling:false },{ id:"prc-014", name:"조리 - 검수", isCcp:false, isInspection:true, isCooling:false }] },
   { id: "cooling",    label: "냉각/방열",  spaceLabel: "냉각실",   color: "#3b82f6",
@@ -38,13 +43,12 @@ const PALETTE: PaletteGroup[] = [
 
 // ── 타입 ──────────────────────────────────────────────────
 
-type SavedProcess = { id: string; name: string; nodes: CanvasNode[]; edges: Edge[]; createdAt: string }
-
 type CanvasNode = {
   id: string; paletteId: string; groupId: string; groupColor: string; spaceLabel: string
   label: string; isCcp: boolean; isInspection: boolean; isCooling: boolean; createKanban: boolean
   special?: "start" | "end"; x: number; y: number
 }
+type SavedProcess = { id: string; name: string; nodes: CanvasNode[]; edges: Edge[]; createdAt: string; usedInBops: { id: string; name: string }[] }
 type Edge = { id: string; from: string; to: string }
 type HistoryEntry = { id: string; timestamp: string; user: string; desc: string; snapshot: { nodes: CanvasNode[]; edges: Edge[] } }
 type BopTemplate = { id: string; name: string; nodes: CanvasNode[]; edges: Edge[]; history: HistoryEntry[]; createdAt: string }
@@ -103,60 +107,6 @@ const DAK: BopTemplate = {
   ],
 }
 
-// ── 예시 저장 공정 ─────────────────────────────────────────
-
-const INITIAL_SAVED_PROCESSES: SavedProcess[] = [
-  {
-    id: "saved-001", name: "불출·전처리 공정", createdAt: "2026.06.01",
-    nodes: [
-      { id:"s01-s",  paletteId:"sp-start",  groupId:"sp",         groupColor:"#22c55e", spaceLabel:"",      label:"시작",              isCcp:false, isInspection:false, isCooling:false, createKanban:false, special:"start", x:60,  y:300 },
-      { id:"s01-n1", paletteId:"prc-029",   groupId:"material",   groupColor:"#f59e0b", spaceLabel:"불출실", label:"자재 입고",          isCcp:false, isInspection:true,  isCooling:false, createKanban:true,  x:244, y:286 },
-      { id:"s01-n2", paletteId:"prc-004",   groupId:"preprocess", groupColor:"#f97316", spaceLabel:"전처리실",label:"전처리 - 야채류",    isCcp:false, isInspection:false, isCooling:false, createKanban:true,  x:552, y:194 },
-      { id:"s01-n3", paletteId:"prc-005",   groupId:"preprocess", groupColor:"#f97316", spaceLabel:"전처리실",label:"전처리 - 수산/육류", isCcp:false, isInspection:false, isCooling:false, createKanban:true,  x:552, y:286 },
-      { id:"s01-n4", paletteId:"prc-006",   groupId:"preprocess", groupColor:"#f97316", spaceLabel:"전처리실",label:"전처리 - 검수",      isCcp:false, isInspection:true,  isCooling:false, createKanban:true,  x:552, y:378 },
-      { id:"s01-e",  paletteId:"sp-end",    groupId:"sp",         groupColor:"#ef4444", spaceLabel:"",      label:"끝",                isCcp:false, isInspection:false, isCooling:false, createKanban:false, special:"end",   x:836, y:300 },
-    ],
-    edges: [
-      { id:"s01-e0", from:"s01-s",  to:"s01-n1" },
-      { id:"s01-e1", from:"s01-n1", to:"s01-n2" }, { id:"s01-e2", from:"s01-n1", to:"s01-n3" }, { id:"s01-e3", from:"s01-n1", to:"s01-n4" },
-      { id:"s01-e4", from:"s01-n2", to:"s01-e"  }, { id:"s01-e5", from:"s01-n3", to:"s01-e"  }, { id:"s01-e6", from:"s01-n4", to:"s01-e"  },
-    ],
-  },
-  {
-    id: "saved-002", name: "조리·냉각 공정", createdAt: "2026.06.02",
-    nodes: [
-      { id:"s02-s",  paletteId:"sp-start",  groupId:"sp",      groupColor:"#22c55e", spaceLabel:"",    label:"시작",       isCcp:false, isInspection:false, isCooling:false, createKanban:false, special:"start", x:60,  y:300 },
-      { id:"s02-n1", paletteId:"prc-010",   groupId:"cooking", groupColor:"#ef4444", spaceLabel:"조리실",label:"조리 - 국솥", isCcp:false, isInspection:false, isCooling:false, createKanban:true,  x:244, y:240 },
-      { id:"s02-n2", paletteId:"prc-014",   groupId:"cooking", groupColor:"#ef4444", spaceLabel:"조리실",label:"조리 - 검수", isCcp:false, isInspection:true,  isCooling:false, createKanban:true,  x:244, y:332 },
-      { id:"s02-n3", paletteId:"prc-024",   groupId:"cooling", groupColor:"#3b82f6", spaceLabel:"냉각실",label:"냉각",       isCcp:false, isInspection:false, isCooling:true,  createKanban:true,  x:552, y:240 },
-      { id:"s02-n4", paletteId:"prc-023",   groupId:"cooling", groupColor:"#3b82f6", spaceLabel:"냉각실",label:"방열",       isCcp:false, isInspection:false, isCooling:true,  createKanban:true,  x:552, y:332 },
-      { id:"s02-e",  paletteId:"sp-end",    groupId:"sp",      groupColor:"#ef4444", spaceLabel:"",    label:"끝",         isCcp:false, isInspection:false, isCooling:false, createKanban:false, special:"end",   x:836, y:300 },
-    ],
-    edges: [
-      { id:"s02-e0", from:"s02-s",  to:"s02-n1" }, { id:"s02-e1", from:"s02-s",  to:"s02-n2" },
-      { id:"s02-e2", from:"s02-n1", to:"s02-n3" }, { id:"s02-e3", from:"s02-n2", to:"s02-n4" },
-      { id:"s02-e4", from:"s02-n3", to:"s02-e"  }, { id:"s02-e5", from:"s02-n4", to:"s02-e"  },
-    ],
-  },
-  {
-    id: "saved-003", name: "내포장·출고 공정", createdAt: "2026.06.03",
-    nodes: [
-      { id:"s03-s",  paletteId:"sp-start",  groupId:"sp",    groupColor:"#22c55e", spaceLabel:"",      label:"시작",           isCcp:false, isInspection:false, isCooling:false, createKanban:false, special:"start", x:60,   y:300 },
-      { id:"s03-n1", paletteId:"prc-015",   groupId:"inner", groupColor:"#10b981", spaceLabel:"내포장실",label:"내포장 - 소용량", isCcp:false, isInspection:false, isCooling:false, createKanban:true,  x:244,  y:196 },
-      { id:"s03-n2", paletteId:"prc-016",   groupId:"inner", groupColor:"#10b981", spaceLabel:"내포장실",label:"내포장 - 대용량", isCcp:false, isInspection:false, isCooling:false, createKanban:true,  x:244,  y:288 },
-      { id:"s03-n3", paletteId:"prc-022",   groupId:"inner", groupColor:"#10b981", spaceLabel:"내포장실",label:"금속검출기",      isCcp:true,  isInspection:false, isCooling:false, createKanban:true,  x:244,  y:380 },
-      { id:"s03-n4", paletteId:"prc-026",   groupId:"outer", groupColor:"#8b5cf6", spaceLabel:"외포장실",label:"피킹",           isCcp:false, isInspection:true,  isCooling:false, createKanban:true,  x:552,  y:240 },
-      { id:"s03-n5", paletteId:"prc-027",   groupId:"outer", groupColor:"#8b5cf6", spaceLabel:"외포장실",label:"패킹",           isCcp:false, isInspection:false, isCooling:false, createKanban:true,  x:552,  y:332 },
-      { id:"s03-e",  paletteId:"sp-end",    groupId:"sp",    groupColor:"#ef4444", spaceLabel:"",      label:"끝",             isCcp:false, isInspection:false, isCooling:false, createKanban:false, special:"end",   x:836,  y:300 },
-    ],
-    edges: [
-      { id:"s03-e0", from:"s03-s",  to:"s03-n1" }, { id:"s03-e1", from:"s03-s",  to:"s03-n2" }, { id:"s03-e2", from:"s03-s",  to:"s03-n3" },
-      { id:"s03-e3", from:"s03-n1", to:"s03-n4" }, { id:"s03-e4", from:"s03-n2", to:"s03-n4" }, { id:"s03-e5", from:"s03-n3", to:"s03-n5" },
-      { id:"s03-e6", from:"s03-n4", to:"s03-e"  }, { id:"s03-e7", from:"s03-n5", to:"s03-e"  },
-    ],
-  },
-]
-
 // ── 메인 ──────────────────────────────────────────────────
 
 export default function BopPage() {
@@ -174,10 +124,15 @@ export default function BopPage() {
   const [newName, setNewName] = useState("")
   const [isCreating, setIsCreating] = useState(false)
 
-  const [savedProcesses, setSavedProcesses] = useState<SavedProcess[]>(INITIAL_SAVED_PROCESSES)
+  const [savedProcesses, setSavedProcesses] = useState<SavedProcess[]>(() => getSavedProcesses())
   const [savedProcessOpen, setSavedProcessOpen] = useState(false)
   const [savedProcessName, setSavedProcessName] = useState("")
   const [openSavedSection, setOpenSavedSection] = useState(true)
+  const [savedProcessSuccessOpen, setSavedProcessSuccessOpen] = useState(false)
+  const [viewSidebarTab, setViewSidebarTab] = useState<"bop" | "saved">("bop")
+  const [viewingSavedProcess, setViewingSavedProcess] = useState<SavedProcess | null>(null)
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [deleteSavedProcessOpen, setDeleteSavedProcessOpen] = useState(false)
 
   // 삭제 확인 다이얼로그
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -186,6 +141,10 @@ export default function BopPage() {
   const nodes = active?.nodes ?? []
   const edges = active?.edges ?? []
   const history = active?.history ?? []
+
+  // 저장된 공정 뷰 모드일 때 캔버스에 표시할 노드/엣지
+  const displayNodes = (!isEditing && viewingSavedProcess) ? viewingSavedProcess.nodes : nodes
+  const displayEdges = (!isEditing && viewingSavedProcess) ? viewingSavedProcess.edges : edges
 
   // 템플릿 패치
   const patchActive = useCallback((patch: Partial<BopTemplate>, histDesc?: string) => {
@@ -206,6 +165,10 @@ export default function BopPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const canvasRef = useRef<HTMLDivElement>(null)
+
+  // 그룹 컨테이너 드래그 상태
+  const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null)
+  const groupDragLastPos = useRef({ x: 0, y: 0 })
 
   // 연결 상태
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -247,14 +210,28 @@ export default function BopPage() {
   const onCanvasMouseMove = useCallback((e: React.MouseEvent) => {
     const pos = toCanvas(e.clientX, e.clientY)
     setMousePos(pos)
+    if (draggingGroupId && isEditing) {
+      const dx = pos.x - groupDragLastPos.current.x
+      const dy = pos.y - groupDragLastPos.current.y
+      groupDragLastPos.current = pos
+      patchActive({ nodes: nodes.map(n =>
+        n.groupId === draggingGroupId && !n.special
+          ? { ...n, x: Math.max(0, n.x + dx), y: Math.max(0, n.y + dy) }
+          : n
+      )})
+      return
+    }
     if (draggingId && isEditing) {
       const nx = Math.max(0, pos.x - dragOffset.current.x)
       const ny = Math.max(0, pos.y - dragOffset.current.y)
       patchActive({ nodes: nodes.map(n => n.id === draggingId ? { ...n, x: nx, y: ny } : n) })
     }
-  }, [draggingId, isEditing, nodes, patchActive, toCanvas])
+  }, [draggingGroupId, draggingId, isEditing, nodes, patchActive, toCanvas])
 
-  const onCanvasMouseUp = useCallback(() => setDraggingId(null), [])
+  const onCanvasMouseUp = useCallback(() => {
+    setDraggingId(null)
+    setDraggingGroupId(null)
+  }, [])
 
   const onCanvasClick = useCallback(() => {
     if (connectingFrom) { setConnectingFrom(null); return }
@@ -500,25 +477,29 @@ export default function BopPage() {
       nodes: JSON.parse(JSON.stringify(nodes)),
       edges: JSON.parse(JSON.stringify(edges)),
       createdAt: nowStr().slice(0, 10),
+      usedInBops: [],
     }
-    setSavedProcesses(prev => [...prev, sp])
+    storeSaveProcess(sp)
+    setSavedProcesses(getSavedProcesses())
     setSavedProcessOpen(false)
     setSavedProcessName("")
+    setSavedProcessSuccessOpen(true)
   }, [savedProcessName, nodes, edges])
 
   const groupContainers = useMemo(() => {
     const groups: Record<string, { spaceLabel: string; groupColor: string; nodes: CanvasNode[] }> = {}
-    nodes.forEach(n => {
+    displayNodes.forEach(n => {
       if (n.special || !n.spaceLabel) return
       if (!groups[n.groupId]) groups[n.groupId] = { spaceLabel: n.spaceLabel, groupColor: n.groupColor, nodes: [] }
       groups[n.groupId].nodes.push(n)
     })
-    return Object.values(groups).map(g => {
+    return Object.entries(groups).map(([groupId, g]) => {
       const minX = Math.min(...g.nodes.map(n => n.x))
       const minY = Math.min(...g.nodes.map(n => n.y))
       const maxX = Math.max(...g.nodes.map(n => n.x + NODE_W))
       const maxY = Math.max(...g.nodes.map(n => n.y + NODE_H))
       return {
+        groupId,
         spaceLabel: g.spaceLabel,
         groupColor: g.groupColor,
         x: minX - CONTAINER_PAD,
@@ -539,17 +520,19 @@ export default function BopPage() {
   }, [selectedId, deleteNode, isEditing])
 
   // 연결 미리보기
-  const fromNode = connectingFrom ? nodes.find(n => n.id === connectingFrom) : null
+  const fromNode = connectingFrom ? displayNodes.find(n => n.id === connectingFrom) : null
   const fromX = fromNode ? fromNode.x + nw(fromNode) : 0
   const fromY = fromNode ? fromNode.y + nh(fromNode) / 2 : 0
 
-  const allW = nodes.reduce((m, n) => Math.max(m, n.x + nw(n) + 80), 900)
-  const allH = nodes.reduce((m, n) => Math.max(m, n.y + nh(n) + 80), 500)
+  const allW = displayNodes.reduce((m, n) => Math.max(m, n.x + nw(n) + 1200), 1200)
+  const allH = displayNodes.reduce((m, n) => Math.max(m, n.y + nh(n) + 1200), 1200)
 
   const MINIMAP_W = 180
   const MINIMAP_H = 100
-  const canvasW = Math.max(allW, 900)
-  const canvasH = Math.max(allH, 500)
+  const vpW = viewportSize.w > 0 ? Math.ceil(viewportSize.w / zoom) : 1200
+  const vpH = viewportSize.h > 0 ? Math.ceil(viewportSize.h / zoom) : 700
+  const canvasW = Math.max(allW, vpW)
+  const canvasH = Math.max(allH, vpH)
   const mmScale = Math.min(MINIMAP_W / canvasW, MINIMAP_H / canvasH)
   const mmActualW = canvasW * mmScale
   const mmActualH = canvasH * mmScale
@@ -572,7 +555,8 @@ export default function BopPage() {
       <div className="flex items-center gap-3 px-4 py-2.5 border-b shrink-0">
         {isEditing && isCreating ? (
           <>
-            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors" onClick={handleCancel}>
+            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setCancelConfirmOpen(true)}>
               <ArrowLeft className="size-4" />뒤로가기
             </button>
             <Separator orientation="vertical" className="h-6" />
@@ -599,15 +583,29 @@ export default function BopPage() {
 
           {active && !isEditing && (
             <>
-              <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => setShowHistory(v => !v)}>
-                <History className="size-3.5" />{showHistory ? "이력 닫기" : "수정 이력"}
+              {!viewingSavedProcess && (
+                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => setShowHistory(v => !v)}>
+                  <History className="size-3.5" />{showHistory ? "이력 닫기" : "수정 이력"}
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => setCreateOpen(true)}>
+                <Plus className="size-3.5" />생성
               </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="size-3.5" />삭제
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={handleEdit}>
-                <Pencil className="size-3.5" />편집
-              </Button>
+              {viewingSavedProcess ? (
+                <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive"
+                  onClick={() => setDeleteSavedProcessOpen(true)}>
+                  <Trash2 className="size-3.5" />삭제
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+                    <Trash2 className="size-3.5" />삭제
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={handleEdit}>
+                    <Pencil className="size-3.5" />편집
+                  </Button>
+                </>
+              )}
             </>
           )}
 
@@ -631,33 +629,85 @@ export default function BopPage() {
 
       {/* 본문 */}
       <div className="flex flex-1 overflow-hidden">
-        {/* 좌측 BOP 목록 (뷰 모드) */}
+        {/* 좌측 사이드바 (뷰 모드) */}
         {!isEditing && (
           <aside className="w-52 shrink-0 border-r bg-muted/20 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b">
-              <span className="text-xs font-medium text-muted-foreground">BOP 유형</span>
-              <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setCreateOpen(true)}>
-                <Plus className="size-3" />생성
+            {/* 탭 헤더 */}
+            <div className="flex border-b shrink-0">
+              <button
+                className={cn("flex-1 py-2 text-xs font-medium transition-colors border-b-2",
+                  viewSidebarTab === "bop" ? "text-foreground border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}
+                onClick={() => setViewSidebarTab("bop")}>
+                BOP 유형
+              </button>
+              <button
+                className={cn("flex-1 py-2 text-xs font-medium transition-colors border-b-2 flex items-center justify-center gap-1",
+                  viewSidebarTab === "saved" ? "text-foreground border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}
+                onClick={() => setViewSidebarTab("saved")}>
+                저장된 공정
+                {savedProcesses.length > 0 && (
+                  <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{savedProcesses.length}</Badge>
+                )}
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto py-1">
-              {templates.length === 0 ? (
-                <p className="px-3 py-4 text-xs text-muted-foreground text-center">등록된 BOP가 없습니다</p>
-              ) : (
-                templates.map(t => (
-                  <button key={t.id}
-                    className={cn("w-full text-left px-3 py-2.5 text-sm transition-colors",
-                      t.id === activeId
-                        ? "bg-primary/10 text-primary font-medium border-r-2 border-primary"
-                        : "text-foreground hover:bg-muted/50")}
-                    onClick={() => handleSelectChange(t.id)}>
-                    <div className="truncate">{t.name}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{t.createdAt}</div>
-                  </button>
-                ))
-              )}
-            </div>
+
+            {/* BOP 유형 탭 */}
+            {viewSidebarTab === "bop" && (
+              <div className="flex-1 overflow-y-auto py-1">
+                {templates.length === 0 ? (
+                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">등록된 BOP가 없습니다</p>
+                ) : (
+                  templates.map(t => (
+                    <button key={t.id}
+                      className={cn("w-full text-left px-3 py-2.5 text-sm transition-colors",
+                        t.id === activeId
+                          ? "bg-primary/10 text-primary font-medium border-r-2 border-primary"
+                          : "text-foreground hover:bg-muted/50")}
+                      onClick={() => handleSelectChange(t.id)}>
+                      <div className="truncate">{t.name}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">{t.createdAt}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* 저장된 공정 탭 */}
+            {viewSidebarTab === "saved" && (
+              <div className="flex-1 overflow-y-auto py-1">
+                {savedProcesses.length === 0 ? (
+                  <p className="text-center text-[10px] text-muted-foreground py-6">저장된 공정이 없습니다</p>
+                ) : (
+                  savedProcesses.map(sp => {
+                    const spaces = [...new Map(
+                      sp.nodes.filter(n => !n.special && n.spaceLabel).map(n => [n.groupId, { label: n.spaceLabel, color: n.groupColor }])
+                    ).values()]
+                    const isSelected = viewingSavedProcess?.id === sp.id
+                    return (
+                      <button key={sp.id}
+                        className={cn("w-full text-left px-3 py-2.5 transition-colors",
+                          isSelected
+                            ? "bg-primary/10 text-primary border-r-2 border-primary"
+                            : "hover:bg-muted/50")}
+                        onClick={() => setViewingSavedProcess(isSelected ? null : sp)}>
+                        <div className="text-sm font-medium truncate mb-1">{sp.name}</div>
+                        <div className="flex flex-wrap gap-0.5 mb-0.5">
+                          {spaces.map(g => (
+                            <span key={g.label} className="text-[9px] px-1.5 py-px rounded-full font-medium"
+                              style={{ background: `${g.color}1a`, color: g.color, border: `1px solid ${g.color}4d` }}>
+                              {g.label}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {sp.nodes.filter(n => !n.special).length}개 공정 · {sp.createdAt}
+                        </div>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            )}
           </aside>
         )}
 
@@ -762,7 +812,7 @@ export default function BopPage() {
                               <div className="flex items-center justify-between gap-1">
                                 <span className="text-xs font-medium truncate">{sp.name}</span>
                                 <button
-                                  onClick={e => { e.stopPropagation(); setSavedProcesses(prev => prev.filter(x => x.id !== sp.id)) }}
+                                  onClick={e => { e.stopPropagation(); storeDeleteProcess(sp.id); setSavedProcesses(getSavedProcesses()) }}
                                   className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
                                   <X className="size-3" />
                                 </button>
@@ -831,22 +881,33 @@ export default function BopPage() {
               onDragOver={e => e.preventDefault()} onDrop={onCanvasDrop}>
 
               {/* 공정 장소 컨테이너 */}
-              {groupContainers.map(gc => (
-                <div key={gc.spaceLabel} className="absolute pointer-events-none"
-                  style={{ left: gc.x, top: gc.y, width: gc.width, height: gc.height, zIndex: 2,
-                    border: `1.5px dashed ${gc.groupColor}`, borderRadius: 12,
-                    backgroundColor: `${gc.groupColor}0d` }}>
-                  <span className="absolute flex items-center font-semibold px-2.5 py-0.5 rounded-full"
-                    style={{ fontSize: 11, top: -13, left: 12, whiteSpace: "nowrap",
-                      color: gc.groupColor, backgroundColor: `${gc.groupColor}1a`,
-                      border: `1px solid ${gc.groupColor}4d` }}>
-                    {gc.spaceLabel}
-                  </span>
-                </div>
-              ))}
+              {groupContainers.map(gc => {
+                const isGroupDragging = draggingGroupId === gc.groupId
+                return (
+                  <div key={gc.spaceLabel}
+                    className={cn("absolute", isEditing ? (isGroupDragging ? "cursor-grabbing" : "cursor-grab") : "pointer-events-none")}
+                    style={{ left: gc.x, top: gc.y, width: gc.width, height: gc.height, zIndex: 2,
+                      border: `1.5px dashed ${gc.groupColor}`, borderRadius: 12,
+                      backgroundColor: `${gc.groupColor}0d`,
+                      boxShadow: isGroupDragging ? `0 4px 16px ${gc.groupColor}30` : undefined }}
+                    onMouseDown={isEditing ? (e) => {
+                      e.stopPropagation()
+                      const pos = toCanvas(e.clientX, e.clientY)
+                      groupDragLastPos.current = pos
+                      setDraggingGroupId(gc.groupId)
+                    } : undefined}>
+                    <span className="absolute flex items-center font-semibold px-2.5 py-0.5 rounded-full"
+                      style={{ fontSize: 11, top: -13, left: 12, whiteSpace: "nowrap",
+                        color: gc.groupColor, backgroundColor: `${gc.groupColor}1a`,
+                        border: `1px solid ${gc.groupColor}4d` }}>
+                      {gc.spaceLabel}
+                    </span>
+                  </div>
+                )
+              })}
 
               {/* SVG 연결선 */}
-              <svg className="absolute inset-0 overflow-visible" style={{ zIndex: 5, pointerEvents: "none" }} width={Math.max(allW, 900)} height={Math.max(allH, 500)}>
+              <svg className="absolute inset-0 overflow-visible" style={{ zIndex: 5, pointerEvents: "none" }} width={canvasW} height={canvasH}>
                 <defs>
                   <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
                     <path d="M0,0L0,6L8,3z" fill="#94a3b8" />
@@ -858,9 +919,9 @@ export default function BopPage() {
                     <path d="M0,0L0,6L8,3z" fill="#ef4444" />
                   </marker>
                 </defs>
-                {edges.map(ed => {
-                  const fn = nodes.find(n => n.id === ed.from)
-                  const tn = nodes.find(n => n.id === ed.to)
+                {displayEdges.map(ed => {
+                  const fn = displayNodes.find(n => n.id === ed.from)
+                  const tn = displayNodes.find(n => n.id === ed.to)
                   if (!fn || !tn) return null
                   const fx = fn.x + nw(fn), fy = fn.y + nh(fn) / 2
                   const tx = tn.x, ty = tn.y + nh(tn) / 2
@@ -891,7 +952,7 @@ export default function BopPage() {
               </svg>
 
               {/* 노드들 */}
-              {nodes.map(node => {
+              {displayNodes.map(node => {
                 const isSel = selectedId === node.id
                 const isConnFrom = connectingFrom === node.id
                 const isHovered = hoveredId === node.id
@@ -986,7 +1047,7 @@ export default function BopPage() {
                   border: `1px solid ${gc.groupColor}`, background: `${gc.groupColor}1a`
                 }} />
               ))}
-              {nodes.map(n => (
+              {displayNodes.map(n => (
                 <div key={n.id} className="absolute rounded-sm" style={{
                   left: n.x * mmScale, top: n.y * mmScale,
                   width: Math.max(3, nw(n) * mmScale), height: Math.max(2, nh(n) * mmScale),
@@ -1006,14 +1067,29 @@ export default function BopPage() {
         )}
         </div>
 
-        {/* 수정 이력 패널 (뷰 모드, showHistory) */}
+        {/* 수정 이력 패널 (뷰 모드) */}
+        {active && !isEditing && !showHistory && (
+          <button
+            className="shrink-0 border-l flex flex-col items-center justify-start pt-3 px-1.5 gap-1.5 hover:bg-muted/40 transition-colors bg-background"
+            style={{ width: 28 }}
+            onClick={() => setShowHistory(true)}>
+            <ChevronLeft className="size-3.5 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground font-medium" style={{ writingMode: "vertical-rl", letterSpacing: 1 }}>수정 이력</span>
+          </button>
+        )}
         {active && !isEditing && showHistory && (
           <aside className="w-68 shrink-0 border-l bg-background flex flex-col overflow-hidden" style={{ width: 268 }}>
             <div className="flex items-center justify-between px-4 py-2.5 border-b">
               <div className="flex items-center gap-1.5 text-sm font-medium">
                 <Clock className="size-3.5 text-muted-foreground" />수정 이력
               </div>
-              <Badge variant="secondary" className="text-xs">{history.length}건</Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="secondary" className="text-xs">{history.length}건</Badge>
+                <button className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowHistory(false)}>
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto">
               {history.length === 0 ? (
@@ -1090,6 +1166,54 @@ export default function BopPage() {
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setSavedProcessOpen(false)}>취소</Button>
             <Button size="sm" onClick={handleSaveProcess} disabled={!savedProcessName.trim()}>저장</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 생성 취소 확인 팝업 */}
+      <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader><DialogTitle>등록을 취소할까요?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">저장하지 않고 나가면 작성 중인 BOP가 삭제됩니다.</p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCancelConfirmOpen(false)}>취소</Button>
+            <Button size="sm" className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setCancelConfirmOpen(false); handleCancel() }}>확인</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 저장된 공정 삭제 확인 */}
+      <Dialog open={deleteSavedProcessOpen} onOpenChange={setDeleteSavedProcessOpen}>
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader><DialogTitle>저장된 공정 삭제</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">
+            <strong>{viewingSavedProcess?.name}</strong> 을(를) 삭제하시겠습니까?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteSavedProcessOpen(false)}>취소</Button>
+            <Button size="sm" className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (viewingSavedProcess) storeDeleteProcess(viewingSavedProcess.id)
+                setSavedProcesses(getSavedProcesses())
+                setViewingSavedProcess(null)
+                setDeleteSavedProcessOpen(false)
+              }}>삭제</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 공정 저장 성공 팝업 */}
+      <Dialog open={savedProcessSuccessOpen} onOpenChange={setSavedProcessSuccessOpen}>
+        <DialogContent className="sm:max-w-xs" showCloseButton>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><CheckCircle2 className="size-5 text-green-500" />저장 완료</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">공정이 저장되었습니다.<br />저장된 공정 목록에서 확인할 수 있습니다.</p>
+          <DialogFooter>
+            <Button size="sm" className="w-full" onClick={() => {
+              setSavedProcessSuccessOpen(false)
+              setIsEditing(false); setIsDirty(false); setShowHistory(true); setIsCreating(false)
+              setViewSidebarTab("saved")
+            }}>확인</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

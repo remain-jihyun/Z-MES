@@ -34,6 +34,7 @@ export const mockSpaces: Space[] = [
   { id: "SPC-016", name: "내포장실", spaceType: "WORKSHOP", cleanZone: "CLEAN", depth: 2, floor: "2층", temperatureId: "TEMP-006", temperatureName: "포장", sortOrder: 9 },
   { id: "SPC-017", name: "외포장실", spaceType: "WORKSHOP", cleanZone: "SEMI_CLEAN", depth: 2, floor: "2층", temperatureId: "TEMP-006", temperatureName: "포장", sortOrder: 10 },
   { id: "SPC-018", name: "불출실", spaceType: "WORKSHOP", cleanZone: "GENERAL", depth: 2, floor: "2층", temperatureId: "TEMP-005", temperatureName: "상온", sortOrder: 11 },
+  { id: "SPC-025", name: "해동실", spaceType: "WORKSHOP", cleanZone: "CLEAN", depth: 2, floor: "2층", temperatureId: "TEMP-004", temperatureName: "냉장(해동)", sortOrder: 12 },
   // 3층
   { id: "SPC-019", name: "국전류실", spaceType: "WORKSHOP", cleanZone: "CLEAN", depth: 2, floor: "3층", temperatureId: "TEMP-006", temperatureName: "포장", sortOrder: 1 },
   { id: "SPC-020", name: "상온창고 - 3층", spaceType: "WAREHOUSE", cleanZone: "GENERAL", depth: 1, floor: "3층", temperatureId: "TEMP-005", temperatureName: "상온", sortOrder: 2 },
@@ -85,4 +86,8 @@ export const mockProcesses: Process[] = [
   { id: "PRC-029", name: "자재 입고", spaceId: "SPC-018", spaceName: "불출실", isCcp: false, isInspection: true, isCooling: false, createKanban: true, deviceId: null, equipmentName: null, description: null, sortOrder: 1 },
   { id: "PRC-030", name: "자재 불출 - 전기호출", spaceId: "SPC-018", spaceName: "불출실", isCcp: false, isInspection: false, isCooling: false, createKanban: true, deviceId: null, equipmentName: null, description: null, sortOrder: 2 },
   { id: "PRC-031", name: "자재 불출 - 통합 불출", spaceId: "SPC-018", spaceName: "불출실", isCcp: false, isInspection: false, isCooling: false, createKanban: true, deviceId: null, equipmentName: null, description: null, sortOrder: 3 },
+  // 해동실 (3건)
+  { id: "PRC-033", name: "해동 - 냉장", spaceId: "SPC-025", spaceName: "해동실", isCcp: false, isInspection: false, isCooling: false, createKanban: true, deviceId: null, equipmentName: null, description: null, sortOrder: 1 },
+  { id: "PRC-034", name: "해동 - 유수", spaceId: "SPC-025", spaceName: "해동실", isCcp: false, isInspection: false, isCooling: false, createKanban: true, deviceId: null, equipmentName: null, description: null, sortOrder: 2 },
+  { id: "PRC-035", name: "해동 - 검수", spaceId: "SPC-025", spaceName: "해동실", isCcp: false, isInspection: true, isCooling: false, createKanban: true, deviceId: null, equipmentName: null, description: null, sortOrder: 3 },
 ]

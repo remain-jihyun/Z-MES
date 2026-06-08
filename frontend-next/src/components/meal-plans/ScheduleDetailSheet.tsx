@@ -36,8 +36,8 @@ interface ScheduleDetailSheetProps {
   schedule: DailyMealPlan | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onEdit: (plan: DailyMealPlan) => void
-  onDelete: (id: string) => void
+  onEdit?: (plan: DailyMealPlan) => void
+  onDelete?: (id: string) => void
   viewMode: CalendarViewMode
 }
 
@@ -141,26 +141,24 @@ export function ScheduleDetailSheet({
             </div>
           </div>
 
-          <SheetFooter className="px-4">
-            <div className="flex w-full gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => onEdit(schedule)}
-              >
-                <Pencil className="h-4 w-4" />
-                수정
-              </Button>
-              <Button
-                variant="destructive"
-                className="flex-1"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                삭제
-              </Button>
-            </div>
-          </SheetFooter>
+          {(onEdit || onDelete) && (
+            <SheetFooter className="px-4">
+              <div className="flex w-full gap-2">
+                {onEdit && (
+                  <Button variant="outline" className="flex-1" onClick={() => onEdit(schedule)}>
+                    <Pencil className="h-4 w-4" />
+                    수정
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button variant="destructive" className="flex-1" onClick={() => setDeleteOpen(true)}>
+                    <Trash2 className="h-4 w-4" />
+                    삭제
+                  </Button>
+                )}
+              </div>
+            </SheetFooter>
+          )}
         </SheetContent>
       </Sheet>
 
@@ -179,7 +177,7 @@ export function ScheduleDetailSheet({
             <Button
               variant="destructive"
               onClick={() => {
-                onDelete(schedule.id)
+                onDelete?.(schedule.id)
                 setDeleteOpen(false)
               }}
             >

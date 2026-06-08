@@ -72,7 +72,8 @@ export const navItems = [
       { title: "품목 DB", href: "/master/products" },
       { title: "정기식단 DB", href: "/master/menu" },
       { title: "BOM", href: "/master/bom" },
-      { title: "BOP", href: "/master/bop" },
+      { title: "BOP 유형", href: "/master/bop" },
+      { title: "저장된 공정", href: "/master/bop/saved" },
       { title: "거래처", href: "/master/partners" },
       { title: "발주 설정", href: "/master/order-settings" },
       { title: "유형관리", href: "/master/types" },
@@ -85,6 +86,14 @@ export const navItems = [
     items: [
       { title: "NFC 태그", href: "/system/nfc" },
       { title: "디바이스 등록", href: "/system/device" },
+    ],
+  },
+  {
+    title: "MIS(삭제 예정)",
+    items: [
+      { title: "품목 DB", href: "/mis/products" },
+      { title: "정기식단 DB", href: "/mis/menu" },
+      { title: "거래처 관리", href: "/mis/partners" },
     ],
   },
   {

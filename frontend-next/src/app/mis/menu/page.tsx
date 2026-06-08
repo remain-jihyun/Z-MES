@@ -3,10 +3,15 @@
 import { useState, useCallback, useRef } from "react"
 import { MealPlanCalendar } from "@/components/meal-plans/MealPlanCalendar"
 import { ScheduleDetailSheet } from "@/components/meal-plans/ScheduleDetailSheet"
+import { ScheduleDialog } from "@/components/meal-plans/ScheduleDialog"
+import { AddItemsDialog } from "@/components/meal-plans/AddItemsDialog"
 import { useMealPlanCalendar } from "@/hooks/useMealPlanCalendar"
 import type { CalendarViewMode } from "@/hooks/useMealPlanCalendar"
 import { useMealPlanSchedules } from "@/hooks/useMealPlanSchedules"
+import { useMealPlanCrud } from "@/hooks/useMealPlanCrud"
+import type { DailyMealPlan, MealPlanItem } from "@/types/meal-plan"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -15,18 +20,24 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { Plus, Upload } from "lucide-react"
 
 export default function MenuPage() {
   const {
     dailyPlans,
     mealPlanTypes,
     isLoading,
+    filter,
     updateFilter,
     activeMealPlanCode,
     setActiveMealPlanCode,
     selectedDailyPlan,
     setSelectedDailyPlan,
+    reload,
   } = useMealPlanSchedules()
+
+  const { handleCreate, handleBulkCreate, handleUpdate, handleDelete, isSubmitting } =
+    useMealPlanCrud(reload)
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>("production")
 
@@ -43,6 +54,10 @@ export default function MenuPage() {
   } = useMealPlanCalendar(dailyPlans, viewMode)
 
   const [detailOpen, setDetailOpen] = useState(false)
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<DailyMealPlan | null>(null)
+  const [addItemsOpen, setAddItemsOpen] = useState(false)
+  const [addItemsDate, setAddItemsDate] = useState("")
 
   const printRef = useRef<HTMLDivElement>(null)
 
@@ -76,9 +91,70 @@ export default function MenuPage() {
       if (day?.dailyPlan) {
         setSelectedDailyPlan(day.dailyPlan)
         setDetailOpen(true)
+      } else if (day?.isCurrentMonth) {
+        setAddItemsDate(dateStr)
+        setAddItemsOpen(true)
       }
     },
     [selectedDate, selectDate, calendarDays, setSelectedDailyPlan],
+  )
+
+  const handleCreateClick = useCallback(() => {
+    setEditingPlan(null)
+    setScheduleDialogOpen(true)
+  }, [])
+
+  const handleEditClick = useCallback((plan: DailyMealPlan) => {
+    setEditingPlan(plan)
+    setDetailOpen(false)
+    setScheduleDialogOpen(true)
+  }, [])
+
+  const handleDeleteClick = useCallback(
+    async (id: string) => {
+      await handleDelete(id)
+      setSelectedDailyPlan(null)
+      setDetailOpen(false)
+    },
+    [handleDelete, setSelectedDailyPlan],
+  )
+
+  const handleScheduleSave = useCallback(
+    async (data: {
+      startDate: string
+      endDate: string
+      mealPlanCode: string
+      mealPlanName: string
+      items: DailyMealPlan["items"]
+    }) => {
+      if (editingPlan) {
+        await handleUpdate(editingPlan.id, { items: data.items })
+      } else {
+        await handleBulkCreate(
+          data.startDate, data.endDate,
+          data.mealPlanCode, data.mealPlanName, data.items,
+        )
+      }
+      setScheduleDialogOpen(false)
+      setEditingPlan(null)
+    },
+    [editingPlan, handleUpdate, handleBulkCreate],
+  )
+
+  const handleAddItemsSave = useCallback(
+    async (items: MealPlanItem[]) => {
+      const activeType = mealPlanTypes.find((t) => t.code === activeMealPlanCode)
+      if (!activeType) return
+      await handleCreate({
+        date: addItemsDate,
+        mealPlanCode: activeMealPlanCode,
+        mealPlanName: activeType.name,
+        items,
+        syncStatus: "not_synced",
+      })
+      setAddItemsOpen(false)
+    },
+    [activeMealPlanCode, addItemsDate, mealPlanTypes, handleCreate],
   )
 
   const handlePrint = () => {
@@ -154,8 +230,18 @@ export default function MenuPage() {
       {/* 페이지 헤더 */}
       <div className="flex items-center justify-between px-4 lg:px-6">
         <div>
-          <p className="text-sm text-muted-foreground">기초정보</p>
+          <p className="text-sm text-muted-foreground">MIS(삭제 예정)</p>
           <h1 className="text-2xl font-bold tracking-tight">정기식단 DB</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1" disabled>
+            <Upload className="h-4 w-4" />
+            엑셀 업로드
+          </Button>
+          <Button size="sm" className="gap-1" onClick={handleCreateClick}>
+            <Plus className="h-4 w-4" />
+            식단 배치 등록
+          </Button>
         </div>
       </div>
 
@@ -234,7 +320,30 @@ export default function MenuPage() {
         schedule={selectedDailyPlan}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onEdit={handleEditClick}
+        onDelete={handleDeleteClick}
         viewMode={viewMode}
+      />
+
+      <AddItemsDialog
+        open={addItemsOpen}
+        onOpenChange={setAddItemsOpen}
+        targetDate={addItemsDate}
+        mealPlanCode={activeMealPlanCode}
+        mealPlanName={activeTypeName}
+        existingPlans={dailyPlans}
+        onSave={handleAddItemsSave}
+        isSubmitting={isSubmitting}
+      />
+
+      <ScheduleDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        editingPlan={editingPlan}
+        mealPlanTypes={mealPlanTypes}
+        defaultMealPlanCode={activeMealPlanCode}
+        onSave={handleScheduleSave}
+        isSubmitting={isSubmitting}
       />
     </div>
   )

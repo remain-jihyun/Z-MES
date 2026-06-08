@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { getItems } from "@/lib/api/products";
+import { getItems, deleteItem } from "@/lib/api/products";
 import { Card, CardContent } from "@/components/ui/card";
+import { ProductDetailDialog } from "@/components/products/ProductDetailDialog";
 import { ProductsToolbar } from "@/components/products/ProductsToolbar";
-import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
-import { ChangeLogBanner } from "@/components/ChangeLogBanner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ArrowUp, ArrowDown, ArrowUpDown, Trash2 } from "lucide-react";
 import type { ItemDetail, ItemFilterParams } from "@/types/products";
 import { ITEM_TYPE_LABELS, STORAGE_METHOD_LABELS } from "@/types/products";
 
@@ -59,6 +61,9 @@ export default function ProductsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editCode, setEditCode] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ItemDetail | null>(null);
 
   const load = useCallback(async () => {
     const result = await getItems({
@@ -89,12 +94,20 @@ export default function ProductsPage() {
     setPage(1);
   };
 
+  const handleCreate = () => { setEditCode(null); setDialogOpen(true); };
+  const handleRowClick = (code: string) => { setEditCode(code); setDialogOpen(true); };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteItem(deleteTarget.code);
+    setDeleteTarget(null);
+    load();
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageNumbers = useMemo(() => getPageNumbers(page, totalPages), [page, totalPages]);
 
   return (
-    <div className="space-y-0">
-      <ChangeLogBanner pageHref="/master/products" />
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">품목 DB</h1>
@@ -103,7 +116,7 @@ export default function ProductsPage() {
       <ProductsToolbar
         filters={filters}
         onFilterChange={handleFilterChange}
-        showSync
+        onCreateClick={handleCreate}
       />
 
       <Card className="overflow-hidden">
@@ -125,7 +138,11 @@ export default function ProductsPage() {
             </thead>
             <tbody className="divide-y">
               {items.map((p) => (
-                <tr key={p.code} className="hover:bg-gray-50">
+                <tr
+                  key={p.code}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => handleRowClick(p.code)}
+                >
                   <td className="px-4 py-3 font-mono text-xs text-gray-600 sticky left-0 bg-white w-28">{p.code}</td>
                   <td className="px-4 py-3 font-medium text-gray-900 sticky left-28 bg-white min-w-36">{p.name}</td>
                   <td className="px-4 py-3 text-xs text-gray-600">
@@ -153,9 +170,20 @@ export default function ProductsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.isActive === "Y" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
-                      {p.isActive === "Y" ? "사용중" : "사용중단"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.isActive === "Y" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
+                        {p.isActive === "Y" ? "사용중" : "사용중단"}
+                      </span>
+                      {p.isActive === "N" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
+                          className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="삭제"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -216,7 +244,34 @@ export default function ProductsPage() {
           </select>
         </div>
       </div>
-    </div>
+
+      <ProductDetailDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editCode={editCode}
+        onSaved={load}
+      />
+
+      {/* 삭제 확인 다이얼로그 */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-sm" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>품목 삭제</DialogTitle>
+          </DialogHeader>
+          <div className="py-3 space-y-1.5">
+            <p className="text-sm text-gray-700">아래 품목을 삭제하시겠습니까?</p>
+            <div className="rounded-md bg-gray-50 border px-3 py-2 text-sm">
+              <span className="font-mono text-xs text-gray-500">{deleteTarget?.code}</span>
+              <span className="ml-2 font-medium text-gray-900">{deleteTarget?.name}</span>
+            </div>
+            <p className="text-xs text-red-500">삭제 후 복구할 수 없습니다.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>취소</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>삭제</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

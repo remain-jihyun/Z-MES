@@ -172,13 +172,14 @@ export function ScheduleDialog({
   isSubmitting,
 }: ScheduleDialogProps) {
   const isEdit = !!editingPlan
+  const todayStr = () => new Date().toISOString().slice(0, 10)
 
   const createForm = useForm({
     resolver: zodResolver(createSchema),
     defaultValues: {
       mealPlanCode: defaultMealPlanCode,
-      startDate: "",
-      endDate: "",
+      startDate: todayStr(),
+      endDate: todayStr(),
       items: [] as MealPlanItem[],
     },
   })
@@ -195,8 +196,8 @@ export function ScheduleDialog({
       } else {
         createForm.reset({
           mealPlanCode: defaultMealPlanCode,
-          startDate: "",
-          endDate: "",
+          startDate: todayStr(),
+          endDate: todayStr(),
           items: [],
         })
       }
